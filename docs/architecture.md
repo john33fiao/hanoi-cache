@@ -15,7 +15,7 @@
 
 | 파일 | 역할 |
 | --- | --- |
-| `src/main.rs` | 애플리케이션 시작점, 환경 변수 로딩, 라우터 구성 |
+| `src/main.rs` | 애플리케이션 시작점, `.env` 및 환경 변수 로딩, 라우터 구성 |
 | `src/handlers.rs` | HTTP 핸들러, 캐시 정책, 오류 응답 |
 | `src/providers.rs` | 외부 API 호출과 응답 변환 |
 | `src/cache.rs` | 인메모리 캐시 구현 |
@@ -25,6 +25,11 @@
 - `AppState.cache`: `Arc<RwLock<HashMap<...>>>` 기반 공유 캐시
 - `AppState.client`: 재사용되는 `reqwest::Client`
 - `AppState.openweathermap_api_key`: 폴백 공급자 호출용 API 키
+
+환경 변수 로딩 정책:
+
+- 시작 시 현재 작업 디렉터리의 `.env`를 먼저 읽습니다.
+- 같은 키가 셸 환경 변수에 이미 있으면 셸 값이 우선합니다.
 
 ## 라우팅
 
@@ -159,6 +164,7 @@ TTL 정책:
 ## 현재 제약 사항
 
 - 서버 시작 시 `OPENWEATHERMAP_API_KEY`가 항상 필요합니다.
+- 이 값은 셸 환경 변수 또는 `.env` 파일에서 제공할 수 있습니다.
 - `/weather/{loc}` 위치 집합이 코드에 고정되어 있습니다.
 - health check, metrics, rate limit은 없습니다.
 - 테스트 코드가 없습니다.

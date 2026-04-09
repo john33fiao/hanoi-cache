@@ -23,13 +23,22 @@
 PowerShell 기준:
 
 ```powershell
-$env:OPENWEATHERMAP_API_KEY="your-api-key"
-$env:PORT="3000"
-$env:RUST_LOG="info"
-cargo run
+Copy-Item .env.example .env
+# .env 파일에 API 키를 채웁니다.
+cargo run --release
 ```
 
 기본 포트는 `3000`이고, 서버는 `0.0.0.0:<PORT>`에 바인딩됩니다.
+애플리케이션은 시작 시 현재 작업 디렉터리의 `.env`를 자동으로 읽고, 이미 셸에 설정된 환경 변수가 있으면 그 값을 우선 사용합니다.
+
+셸 환경 변수로 직접 지정해도 됩니다.
+
+```powershell
+$env:OPENWEATHERMAP_API_KEY="your-api-key"
+$env:PORT="3000"
+$env:RUST_LOG="info"
+cargo run --release
+```
 
 실행 후 기본 주소:
 
@@ -128,7 +137,7 @@ curl "http://127.0.0.1:3000/weather/hoankiem"
 
 | 변수 | 필수 | 기본값 | 설명 |
 | --- | --- | --- | --- |
-| `OPENWEATHERMAP_API_KEY` | 예 | 없음 | OpenWeatherMap 폴백 호출에 사용 |
+| `OPENWEATHERMAP_API_KEY` | 예 | 없음 | OpenWeatherMap 폴백 호출에 사용. 셸 환경 변수 또는 `.env`에서 읽음 |
 | `PORT` | 아니오 | `3000` | 서버 바인딩 포트 |
 | `RUST_LOG` | 아니오 | `info` | `tracing_subscriber` 로그 레벨 |
 
