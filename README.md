@@ -93,6 +93,7 @@ curl "http://127.0.0.1:3000/geocode?q=Hoan%20Kiem%20Lake"
 
 ```bash
 curl "http://127.0.0.1:3000/weather/hoankiem"
+curl "http://127.0.0.1:3000/weather/minhchau"
 ```
 
 대표 응답 예시:
