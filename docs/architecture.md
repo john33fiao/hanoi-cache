@@ -122,10 +122,26 @@ TTL 정책:
 
 - 공급자: Open-Meteo
 - 타임아웃: 700ms
+- 요청 옵션:
+  - `timezone=auto`
+  - `cell_selection=nearest`
+  - `current=...`
 - 사용 필드:
   - `temperature_2m`
   - `relative_humidity_2m`
+  - `apparent_temperature`
+  - `is_day`
+  - `precipitation`
+  - `rain`
+  - `showers`
+  - `snowfall`
+  - `weather_code`
+  - `cloud_cover`
+  - `pressure_msl`
+  - `surface_pressure`
   - `wind_speed_10m`
+  - `wind_direction_10m`
+  - `wind_gusts_10m`
 
 ### Weather 2차 공급자
 
@@ -133,15 +149,58 @@ TTL 정책:
 - 타임아웃: 1000ms
 - 내부 표준 응답으로 변환 후 반환
 - 온도는 Kelvin에서 Celsius로 변환
+- 풍속은 m/s에서 km/h로 변환
+- 날씨 condition id는 WMO weather code로 정규화
+- `rain.1h`, `snow.1h`, `pressure`, `sea_level`, `grnd_level` 등을 Open-Meteo 스타일 필드로 매핑
 
 표준 날씨 응답 구조:
 
 ```json
 {
+  "latitude": 0.0,
+  "longitude": 0.0,
+  "generationtime_ms": 0.0,
+  "utc_offset_seconds": 25200,
+  "timezone": "Asia/Bangkok",
+  "timezone_abbreviation": "GMT+7",
+  "elevation": 0.0,
+  "current_units": {
+    "time": "iso8601",
+    "interval": "seconds",
+    "temperature_2m": "°C",
+    "relative_humidity_2m": "%",
+    "apparent_temperature": "°C",
+    "is_day": "",
+    "precipitation": "mm",
+    "rain": "mm",
+    "showers": "mm",
+    "snowfall": "cm",
+    "weather_code": "wmo code",
+    "cloud_cover": "%",
+    "pressure_msl": "hPa",
+    "surface_pressure": "hPa",
+    "wind_speed_10m": "km/h",
+    "wind_direction_10m": "°",
+    "wind_gusts_10m": "km/h"
+  },
   "current": {
+    "time": "2026-03-25T13:30",
+    "interval": 900,
     "temperature_2m": 0.0,
     "relative_humidity_2m": 0.0,
-    "wind_speed_10m": 0.0
+    "apparent_temperature": 0.0,
+    "is_day": 1,
+    "precipitation": 0.0,
+    "rain": 0.0,
+    "showers": 0.0,
+    "snowfall": 0.0,
+    "weather_code": 0,
+    "cloud_cover": 0.0,
+    "pressure_msl": 0.0,
+    "surface_pressure": 0.0,
+    "wind_speed_10m": 0.0,
+    "wind_direction_10m": 0.0,
+    "wind_gusts_10m": 0.0
   }
 }
 ```
@@ -167,7 +226,7 @@ TTL 정책:
 - 이 값은 셸 환경 변수 또는 `.env` 파일에서 제공할 수 있습니다.
 - `/weather/{loc}` 위치 집합이 코드에 고정되어 있습니다.
 - health check, metrics, rate limit은 없습니다.
-- 테스트 코드가 없습니다.
+- `src/providers.rs`에 핵심 변환 로직용 단위 테스트가 일부 있습니다.
 - geocode 응답은 외부 API 형식에 직접 결합되어 있습니다.
 
 ## 확장 방향

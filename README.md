@@ -100,10 +100,50 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 
 ```json
 {
+  "latitude": 21.0,
+  "longitude": 105.875,
+  "generationtime_ms": 0.135,
+  "utc_offset_seconds": 25200,
+  "timezone": "Asia/Bangkok",
+  "timezone_abbreviation": "GMT+7",
+  "elevation": 18.0,
+  "current_units": {
+    "time": "iso8601",
+    "interval": "seconds",
+    "temperature_2m": "°C",
+    "relative_humidity_2m": "%",
+    "apparent_temperature": "°C",
+    "is_day": "",
+    "precipitation": "mm",
+    "rain": "mm",
+    "showers": "mm",
+    "snowfall": "cm",
+    "weather_code": "wmo code",
+    "cloud_cover": "%",
+    "pressure_msl": "hPa",
+    "surface_pressure": "hPa",
+    "wind_speed_10m": "km/h",
+    "wind_direction_10m": "°",
+    "wind_gusts_10m": "km/h"
+  },
   "current": {
+    "time": "2026-03-25T13:30",
+    "interval": 900,
     "temperature_2m": 29.4,
     "relative_humidity_2m": 78.0,
-    "wind_speed_10m": 2.8
+    "apparent_temperature": 32.1,
+    "is_day": 1,
+    "precipitation": 0.0,
+    "rain": 0.0,
+    "showers": 0.0,
+    "snowfall": 0.0,
+    "weather_code": 3,
+    "cloud_cover": 89.0,
+    "pressure_msl": 1010.0,
+    "surface_pressure": 1007.9,
+    "wind_speed_10m": 19.7,
+    "wind_direction_10m": 140.0,
+    "wind_gusts_10m": 35.6
   }
 }
 ```
@@ -112,7 +152,10 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 
 - 1차 공급자는 Open-Meteo입니다.
 - Open-Meteo가 실패하면 OpenWeatherMap으로 폴백합니다.
-- OpenWeatherMap 응답의 온도는 Kelvin에서 Celsius로 변환합니다.
+- Open-Meteo는 `current=temperature_2m,...,wind_gusts_10m&timezone=auto&cell_selection=nearest` 형태로 호출합니다.
+- 성공 응답은 Open-Meteo 스타일 메타데이터(`latitude`, `timezone`, `current_units`)와 상세 `current` 필드를 포함합니다.
+- OpenWeatherMap 폴백도 같은 JSON 스키마로 정규화합니다.
+- OpenWeatherMap 폴백에서는 온도 Kelvin -> Celsius, 풍속 m/s -> km/h, 날씨 코드는 WMO code로 변환합니다.
 - 성공 응답은 1시간 동안 fresh cache로 유지됩니다.
 - 두 공급자가 모두 실패해도, 만료 후 추가 2시간 안이면 stale cache를 반환합니다.
 
