@@ -7,8 +7,6 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 
 const GEOCODE_USER_AGENT: &str = "Hanoi Research Project (john33fiao@tt-inno.com)";
-const OPEN_METEO_TIMEOUT_MS: u64 = 700;
-const OPEN_WEATHER_TIMEOUT_MS: u64 = 1000;
 const OPEN_METEO_CURRENT_FIELDS: &str = "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m";
 
 #[derive(Clone, Copy)]
@@ -201,18 +199,17 @@ pub async fn fetch_geocode(client: &Client, query: &str) -> Result<String, ()> {
     }
 }
 
-pub async fn fetch_open_meteo(client: &Client, location: Location) -> Result<WeatherResponse, ()> {
+pub async fn fetch_open_meteo(
+    client: &Client,
+    location: Location,
+    timeout: Duration,
+) -> Result<WeatherResponse, ()> {
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current={}&timezone=auto&cell_selection=nearest",
         location.lat, location.lon, OPEN_METEO_CURRENT_FIELDS
     );
 
-    let response = match client
-        .get(url)
-        .timeout(Duration::from_millis(OPEN_METEO_TIMEOUT_MS))
-        .send()
-        .await
-    {
+    let response = match client.get(url).timeout(timeout).send().await {
         Ok(response) => response,
         Err(error) => {
             tracing::error!(error = %error, location = location.key, "Open-Meteo request failed");
@@ -241,18 +238,14 @@ pub async fn fetch_openweathermap(
     client: &Client,
     location: Location,
     api_key: &str,
+    timeout: Duration,
 ) -> Result<WeatherResponse, ()> {
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}",
         location.lat, location.lon, api_key
     );
 
-    let response = match client
-        .get(url)
-        .timeout(Duration::from_millis(OPEN_WEATHER_TIMEOUT_MS))
-        .send()
-        .await
-    {
+    let response = match client.get(url).timeout(timeout).send().await {
         Ok(response) => response,
         Err(error) => {
             tracing::error!(

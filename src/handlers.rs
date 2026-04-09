@@ -94,7 +94,7 @@ pub async fn weather(State(state): State<AppState>, Path(loc): Path<String>) -> 
         return json_body(StatusCode::OK, body);
     }
 
-    match providers::fetch_open_meteo(&state.client, location).await {
+    match providers::fetch_open_meteo(&state.client, location, state.open_meteo_timeout).await {
         Ok(weather) => {
             let body = weather_json(&weather);
             cache::set(&state.cache, cache_key, body.clone(), Some(WEATHER_TTL)).await;
@@ -118,6 +118,7 @@ pub async fn weather(State(state): State<AppState>, Path(loc): Path<String>) -> 
                 &state.client,
                 location,
                 &state.openweathermap_api_key,
+                state.openweathermap_timeout,
             )
             .await
             {

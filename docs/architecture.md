@@ -25,6 +25,8 @@
 - `AppState.cache`: `Arc<RwLock<HashMap<...>>>` 기반 공유 캐시
 - `AppState.client`: 재사용되는 `reqwest::Client`
 - `AppState.openweathermap_api_key`: 폴백 공급자 호출용 API 키
+- `AppState.open_meteo_timeout`: Open-Meteo 요청 타임아웃
+- `AppState.openweathermap_timeout`: OpenWeatherMap 요청 타임아웃
 
 환경 변수 로딩 정책:
 
@@ -121,7 +123,7 @@ TTL 정책:
 ### Weather 1차 공급자
 
 - 공급자: Open-Meteo
-- 타임아웃: 700ms
+- 타임아웃: 환경 변수 `OPEN_METEO_TIMEOUT_MS`, 기본값 2000ms, 빈 값이면 기본값 사용
 - 요청 옵션:
   - `timezone=auto`
   - `cell_selection=nearest`
@@ -146,7 +148,7 @@ TTL 정책:
 ### Weather 2차 공급자
 
 - 공급자: OpenWeatherMap
-- 타임아웃: 1000ms
+- 타임아웃: 환경 변수 `OPENWEATHERMAP_TIMEOUT_MS`, 기본값 2000ms, 빈 값이면 기본값 사용
 - 내부 표준 응답으로 변환 후 반환
 - 온도는 Kelvin에서 Celsius로 변환
 - 풍속은 m/s에서 km/h로 변환
