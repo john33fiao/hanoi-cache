@@ -8,6 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
+use tracing::{info, warn};
 
 use crate::{
     AppState, cache,
@@ -27,28 +28,69 @@ pub async fn geocode(
     Query(params): Query<GeocodeQuery>,
 ) -> Response {
     let query = normalize_query(&params.q);
+    info!(endpoint = "/geocode", query, "request received");
 
     if let Some(body) = cache::get_fresh(&state.cache, &query).await {
+        info!(
+            endpoint = "/geocode",
+            query,
+            source = "cache",
+            status = StatusCode::OK.as_u16(),
+            "request served"
+        );
         return json_body(StatusCode::OK, body);
     }
 
     match providers::fetch_geocode(&state.client, &query).await {
         Ok(body) => {
             cache::set(&state.cache, query, body.clone(), None).await;
+            info!(
+                endpoint = "/geocode",
+                query = params.q.trim(),
+                source = "provider",
+                provider = "nominatim",
+                status = StatusCode::OK.as_u16(),
+                "request served"
+            );
             json_body(StatusCode::OK, body)
         }
-        Err(()) => error_json(StatusCode::SERVICE_UNAVAILABLE, "service unavailable"),
+        Err(()) => {
+            warn!(
+                endpoint = "/geocode",
+                query = params.q.trim(),
+                source = "error",
+                status = StatusCode::SERVICE_UNAVAILABLE.as_u16(),
+                "request failed"
+            );
+            error_json(StatusCode::SERVICE_UNAVAILABLE, "service unavailable")
+        }
     }
 }
 
 pub async fn weather(State(state): State<AppState>, Path(loc): Path<String>) -> Response {
+    info!(endpoint = "/weather/{loc}", loc, "request received");
+
     let Some(location) = providers::location_for(&loc) else {
+        warn!(
+            endpoint = "/weather/{loc}",
+            loc,
+            source = "error",
+            status = StatusCode::BAD_REQUEST.as_u16(),
+            "unknown location requested"
+        );
         return error_json(StatusCode::BAD_REQUEST, "unknown location");
     };
 
     let cache_key = format!("weather:{}", location.key);
 
     if let Some(body) = cache::get_fresh(&state.cache, &cache_key).await {
+        info!(
+            endpoint = "/weather/{loc}",
+            loc = location.key,
+            source = "cache",
+            status = StatusCode::OK.as_u16(),
+            "request served"
+        );
         return json_body(StatusCode::OK, body);
     }
 
@@ -56,10 +98,18 @@ pub async fn weather(State(state): State<AppState>, Path(loc): Path<String>) -> 
         Ok(weather) => {
             let body = weather_json(&weather);
             cache::set(&state.cache, cache_key, body.clone(), Some(WEATHER_TTL)).await;
+            info!(
+                endpoint = "/weather/{loc}",
+                loc = location.key,
+                source = "provider",
+                provider = "open-meteo",
+                status = StatusCode::OK.as_u16(),
+                "request served"
+            );
             json_body(StatusCode::OK, body)
         }
         Err(()) => {
-            tracing::warn!(
+            warn!(
                 location = location.key,
                 "primary weather provider failed, using fallback"
             );
@@ -74,15 +124,37 @@ pub async fn weather(State(state): State<AppState>, Path(loc): Path<String>) -> 
                 Ok(weather) => {
                     let body = weather_json(&weather);
                     cache::set(&state.cache, cache_key, body.clone(), Some(WEATHER_TTL)).await;
+                    info!(
+                        endpoint = "/weather/{loc}",
+                        loc = location.key,
+                        source = "provider",
+                        provider = "openweathermap",
+                        status = StatusCode::OK.as_u16(),
+                        "request served"
+                    );
                     json_body(StatusCode::OK, body)
                 }
                 Err(()) => {
                     if let Some(body) =
                         cache::get_stale(&state.cache, &cache_key, WEATHER_STALE_WINDOW).await
                     {
+                        info!(
+                            endpoint = "/weather/{loc}",
+                            loc = location.key,
+                            source = "stale-cache",
+                            status = StatusCode::OK.as_u16(),
+                            "request served"
+                        );
                         return json_body(StatusCode::OK, body);
                     }
 
+                    warn!(
+                        endpoint = "/weather/{loc}",
+                        loc = location.key,
+                        source = "error",
+                        status = StatusCode::SERVICE_UNAVAILABLE.as_u16(),
+                        "request failed after provider attempts"
+                    );
                     error_json(StatusCode::SERVICE_UNAVAILABLE, "service unavailable")
                 }
             }

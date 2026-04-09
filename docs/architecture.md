@@ -215,6 +215,9 @@ TTL 정책:
 로그:
 
 - 시작 시 리스닝 주소를 `info`로 출력
+- 각 요청 시작 시 `endpoint`와 입력값(`query` 또는 `loc`)을 `info`로 출력
+- 최종 응답 시 `source=cache|provider|stale-cache|error`와 상태 코드를 함께 출력
+- 외부 API를 직접 호출해 성공한 경우 `provider=nominatim|open-meteo|openweathermap`를 함께 출력
 - 공급자 요청 실패는 `error`
 - 날씨 폴백 사용은 `warn`
 

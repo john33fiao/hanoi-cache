@@ -177,6 +177,17 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 }
 ```
 
+### 4. 요청 로그 확인
+
+`RUST_LOG=info`로 실행하면 각 요청마다 요청 수신과 최종 응답 경로가 로그에 남습니다.
+
+- `endpoint`: 어떤 엔드포인트 요청인지
+- `query` 또는 `loc`: 어떤 입력이 들어왔는지
+- `source`: `cache`, `provider`, `stale-cache`, `error`
+- `provider`: 외부 API를 직접 호출한 경우 `nominatim`, `open-meteo`, `openweathermap`
+
+즉, 같은 요청이라도 캐시에서 반환됐는지, 외부 API를 직접 호출했는지, stale cache를 사용했는지 로그에서 바로 구분할 수 있습니다.
+
 ## 환경 변수
 
 | 변수 | 필수 | 기본값 | 설명 |
