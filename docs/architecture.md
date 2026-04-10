@@ -27,6 +27,7 @@
 - `AppState.openweathermap_api_key`: 폴백 공급자 호출용 API 키
 - `AppState.open_meteo_timeout`: Open-Meteo 요청 타임아웃
 - `AppState.openweathermap_timeout`: OpenWeatherMap 요청 타임아웃
+- `AppState.weather_cache_ttl`: 날씨 fresh cache TTL
 
 환경 변수 로딩 정책:
 
@@ -97,7 +98,7 @@ Nominatim 호출 특성:
 TTL 정책:
 
 - 지오코딩: TTL 없음
-- 날씨: fresh TTL 1시간
+- 날씨: fresh TTL은 환경 변수 `WEATHER_CACHE_TTL_SECONDS`로 제어하며, 기본값은 3600초(1시간)
 - 날씨 stale window: 추가 2시간
 
 이 설계의 장점:

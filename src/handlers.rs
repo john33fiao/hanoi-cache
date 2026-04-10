@@ -15,7 +15,6 @@ use crate::{
     providers::{self, WeatherResponse},
 };
 
-const WEATHER_TTL: Duration = Duration::from_secs(60 * 60);
 const WEATHER_STALE_WINDOW: Duration = Duration::from_secs(2 * 60 * 60);
 
 #[derive(Deserialize)]
@@ -97,7 +96,13 @@ pub async fn weather(State(state): State<AppState>, Path(loc): Path<String>) -> 
     match providers::fetch_open_meteo(&state.client, location, state.open_meteo_timeout).await {
         Ok(weather) => {
             let body = weather_json(&weather);
-            cache::set(&state.cache, cache_key, body.clone(), Some(WEATHER_TTL)).await;
+            cache::set(
+                &state.cache,
+                cache_key,
+                body.clone(),
+                Some(state.weather_cache_ttl),
+            )
+            .await;
             info!(
                 endpoint = "/weather/{loc}",
                 loc = location.key,
@@ -124,7 +129,13 @@ pub async fn weather(State(state): State<AppState>, Path(loc): Path<String>) -> 
             {
                 Ok(weather) => {
                     let body = weather_json(&weather);
-                    cache::set(&state.cache, cache_key, body.clone(), Some(WEATHER_TTL)).await;
+                    cache::set(
+                        &state.cache,
+                        cache_key,
+                        body.clone(),
+                        Some(state.weather_cache_ttl),
+                    )
+                    .await;
                     info!(
                         endpoint = "/weather/{loc}",
                         loc = location.key,

@@ -157,7 +157,8 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 - 성공 응답은 Open-Meteo 스타일 메타데이터(`latitude`, `timezone`, `current_units`)와 상세 `current` 필드를 포함합니다.
 - OpenWeatherMap 폴백도 같은 JSON 스키마로 정규화합니다.
 - OpenWeatherMap 폴백에서는 온도 Kelvin -> Celsius, 풍속 m/s -> km/h, 날씨 코드는 WMO code로 변환합니다.
-- 성공 응답은 1시간 동안 fresh cache로 유지됩니다.
+- 성공 응답은 fresh cache로 유지되며, `WEATHER_CACHE_TTL_SECONDS`로 초 단위 조정이 가능합니다.
+- `WEATHER_CACHE_TTL_SECONDS`를 설정하지 않거나 빈 값이면 기본값 `3600`초(1시간)를 사용합니다.
 - 두 공급자가 모두 실패해도, 만료 후 추가 2시간 안이면 stale cache를 반환합니다.
 
 ### 3. 오류 응답
@@ -196,6 +197,7 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 | `OPENWEATHERMAP_API_KEY` | 예 | 없음 | OpenWeatherMap 폴백 호출에 사용. 셸 환경 변수 또는 `.env`에서 읽음 |
 | `OPEN_METEO_TIMEOUT_MS` | 아니오 | `2000` | Open-Meteo 요청 타임아웃. 단위 ms. 미설정 또는 빈 값이면 기본값 사용 |
 | `OPENWEATHERMAP_TIMEOUT_MS` | 아니오 | `2000` | OpenWeatherMap 요청 타임아웃. 단위 ms. 미설정 또는 빈 값이면 기본값 사용 |
+| `WEATHER_CACHE_TTL_SECONDS` | 아니오 | `3600` | 날씨 fresh cache TTL. 단위 초. 미설정 또는 빈 값이면 기본값 1시간 사용 |
 | `PORT` | 아니오 | `3000` | 서버 바인딩 포트 |
 | `RUST_LOG` | 아니오 | `info` | `tracing_subscriber` 로그 레벨 |
 
