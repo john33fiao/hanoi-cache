@@ -148,6 +148,7 @@ TTL 정책:
   - `timezone=auto`
   - `cell_selection=nearest`
   - `current=...`
+  - `daily=temperature_2m_max,temperature_2m_min`
 - 사용 필드:
   - `temperature_2m`
   - `relative_humidity_2m`
@@ -164,18 +165,22 @@ TTL 정책:
   - `wind_speed_10m`
   - `wind_direction_10m`
   - `wind_gusts_10m`
+  - `temperature_2m_max`
+  - `temperature_2m_min`
 
 ### Weather 2차 공급자
 
 - 공급자: OpenWeatherMap
 - 타임아웃: 환경 변수 `OPENWEATHERMAP_TIMEOUT_MS`, 기본값 2000ms, 빈 값이면 기본값 사용
-- 내부 표준 응답으로 변환 후 반환
+- 현재 날씨는 `/data/2.5/weather`, 일별 최고/최저는 `/data/2.5/forecast`로 조회한 뒤 내부 표준 응답으로 변환 후 반환
 - 온도는 Kelvin에서 Celsius로 변환
 - 풍속은 m/s에서 km/h로 변환
 - 날씨 condition id는 WMO weather code로 정규화
 - `rain.1h`, `snow.1h`, `pressure`, `sea_level`, `grnd_level` 등을 Open-Meteo 스타일 필드로 매핑
+- `forecast`의 3시간 예보는 로컬 날짜 기준으로 묶어 `temperature_2m_max`, `temperature_2m_min`를 계산
 - 고정 위치 슬러그는 코드에 정의된 timezone/elevation을 사용
 - GPS 좌표 요청 폴백은 `timezone`과 `timezone_abbreviation`을 `GMT+7` 같은 오프셋 문자열로 채우고 `elevation`은 `0.0`으로 둠
+- OpenWeatherMap 폴백의 `daily` 길이는 forecast에서 계산 가능한 날짜 수만큼만 반환하며, 7일로 패딩하지 않음
 
 표준 날씨 응답 구조:
 
@@ -225,6 +230,16 @@ TTL 정책:
     "wind_speed_10m": 0.0,
     "wind_direction_10m": 0.0,
     "wind_gusts_10m": 0.0
+  },
+  "daily_units": {
+    "time": "iso8601",
+    "temperature_2m_max": "°C",
+    "temperature_2m_min": "°C"
+  },
+  "daily": {
+    "time": ["2026-03-25", "2026-03-26"],
+    "temperature_2m_max": [0.0, 0.0],
+    "temperature_2m_min": [0.0, 0.0]
   }
 }
 ```

@@ -153,6 +153,16 @@ curl "http://127.0.0.1:3000/weather?latitude=abc&longitude=181"
     "wind_speed_10m": 19.7,
     "wind_direction_10m": 140.0,
     "wind_gusts_10m": 35.6
+  },
+  "daily_units": {
+    "time": "iso8601",
+    "temperature_2m_max": "°C",
+    "temperature_2m_min": "°C"
+  },
+  "daily": {
+    "time": ["2026-03-25", "2026-03-26", "2026-03-27"],
+    "temperature_2m_max": [31.2, 32.0, 29.7],
+    "temperature_2m_min": [24.5, 25.1, 23.8]
   }
 }
 ```
@@ -166,11 +176,13 @@ curl "http://127.0.0.1:3000/weather?latitude=abc&longitude=181"
 - `/weather`에서 위도/경도가 없거나 비어 있거나 숫자로 파싱되지 않거나 범위를 벗어나면 `/weather/hoankiem`과 같은 흐름으로 처리합니다.
 - 따라서 GPS 좌표 쿼리에는 별도의 `400 invalid coordinates` 응답이 없고, 잘못된 입력도 기본 위치 응답으로 내려갑니다.
 - 유효한 GPS 좌표 요청의 fresh cache 키는 `weather:coords:<latitude>:<longitude>` 형식을 사용하고, 기본값으로 처리된 요청은 기존 `weather:hoankiem` 키를 재사용합니다.
-- Open-Meteo는 `current=temperature_2m,...,wind_gusts_10m&timezone=auto&cell_selection=nearest` 형태로 호출합니다.
+- Open-Meteo는 `current=temperature_2m,...,wind_gusts_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto&cell_selection=nearest` 형태로 호출합니다.
 - 두 날씨 공급자 타임아웃은 환경 변수로 조정할 수 있고, 미설정 또는 빈 값이면 둘 다 기본값 `2000ms`를 사용합니다.
-- 성공 응답은 Open-Meteo 스타일 메타데이터(`latitude`, `timezone`, `current_units`)와 상세 `current` 필드를 포함합니다.
+- 성공 응답은 Open-Meteo 스타일 메타데이터(`latitude`, `timezone`, `current_units`, `daily_units`)와 상세 `current`, `daily` 필드를 포함합니다.
 - OpenWeatherMap 폴백도 같은 JSON 스키마로 정규화합니다.
 - OpenWeatherMap 폴백에서는 온도 Kelvin -> Celsius, 풍속 m/s -> km/h, 날씨 코드는 WMO code로 변환합니다.
+- OpenWeatherMap 폴백에서는 현재 날씨용 `/data/2.5/weather`와 일별 최고/최저 계산용 `/data/2.5/forecast`를 함께 사용합니다.
+- OpenWeatherMap 폴백의 `daily`는 3시간 예보를 로컬 날짜 기준으로 묶어 일별 최고/최저를 계산하며, 가용한 날짜 수만 반환합니다.
 - GPS 좌표 기반 OpenWeatherMap 폴백에서는 `timezone`과 `timezone_abbreviation`을 `GMT+7` 같은 오프셋 문자열로 채우고, `elevation`은 `0.0`으로 둡니다.
 - 성공 응답은 fresh cache로 유지되며, `WEATHER_CACHE_TTL_SECONDS`로 초 단위 조정이 가능합니다.
 - `WEATHER_CACHE_TTL_SECONDS`를 설정하지 않거나 빈 값이면 기본값 `3600`초(1시간)를 사용합니다.

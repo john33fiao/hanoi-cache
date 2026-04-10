@@ -181,5 +181,6 @@ loginctl enable-linger "$USER"
 
 - 이 서비스는 `/weather/{loc}`에서 고정 슬러그를 지원하고, `/weather?latitude&longitude`에서 GPS 좌표를 지원합니다.
 - `/weather`에서 좌표가 없거나 잘못되면 기본 위치 `hoankiem`으로 처리합니다.
+- 날씨 응답은 현재값 `current`와 일별 요약 `daily`를 함께 포함합니다.
 - 캐시는 메모리 기반이라 컨테이너 재시작 시 모두 초기화됩니다.
 - 현재 `/health` 엔드포인트는 없습니다. 운영 체크는 실제 API 호출이나 로그 확인 기준으로 해야 합니다.

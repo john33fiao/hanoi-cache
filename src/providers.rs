@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use reqwest::{
     Client,
@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 const GEOCODE_USER_AGENT: &str = "Hanoi Research Project (john33fiao@tt-inno.com)";
 const OPEN_METEO_CURRENT_FIELDS: &str = "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m";
+const OPEN_METEO_DAILY_FIELDS: &str = "temperature_2m_max,temperature_2m_min";
 
 pub const DEFAULT_LOCATION_KEY: &str = "hoankiem";
 
@@ -81,6 +82,20 @@ pub struct WeatherCurrent {
     pub wind_gusts_10m: f64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct WeatherDailyUnits {
+    pub time: String,
+    pub temperature_2m_max: String,
+    pub temperature_2m_min: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct WeatherDaily {
+    pub time: Vec<String>,
+    pub temperature_2m_max: Vec<f64>,
+    pub temperature_2m_min: Vec<f64>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WeatherResponse {
     pub latitude: f64,
@@ -92,6 +107,8 @@ pub struct WeatherResponse {
     pub elevation: f64,
     pub current_units: WeatherCurrentUnits,
     pub current: WeatherCurrent,
+    pub daily_units: WeatherDailyUnits,
+    pub daily: WeatherDaily,
 }
 
 #[derive(Deserialize)]
@@ -152,6 +169,30 @@ struct OpenWeatherMapPrecipitation {
 struct OpenWeatherMapSys {
     sunrise: i64,
     sunset: i64,
+}
+
+#[derive(Deserialize)]
+struct OpenWeatherMapForecastResponse {
+    #[serde(default)]
+    list: Vec<OpenWeatherMapForecastItem>,
+    city: OpenWeatherMapForecastCity,
+}
+
+#[derive(Deserialize)]
+struct OpenWeatherMapForecastItem {
+    dt: i64,
+    main: OpenWeatherMapForecastMain,
+}
+
+#[derive(Deserialize)]
+struct OpenWeatherMapForecastMain {
+    temp_min: f64,
+    temp_max: f64,
+}
+
+#[derive(Deserialize)]
+struct OpenWeatherMapForecastCity {
+    timezone: i64,
 }
 
 pub fn default_location() -> WeatherTarget {
@@ -228,8 +269,8 @@ pub async fn fetch_open_meteo(
     timeout: Duration,
 ) -> Result<WeatherResponse, ()> {
     let url = format!(
-        "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current={}&timezone=auto&cell_selection=nearest",
-        target.lat, target.lon, OPEN_METEO_CURRENT_FIELDS
+        "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current={}&daily={}&timezone=auto&cell_selection=nearest",
+        target.lat, target.lon, OPEN_METEO_CURRENT_FIELDS, OPEN_METEO_DAILY_FIELDS
     );
 
     let response = match client.get(url).timeout(timeout).send().await {
@@ -278,6 +319,18 @@ pub async fn fetch_openweathermap(
     api_key: &str,
     timeout: Duration,
 ) -> Result<WeatherResponse, ()> {
+    let current = fetch_openweathermap_current(client, target, api_key, timeout).await?;
+    let forecast = fetch_openweathermap_forecast(client, target, api_key, timeout).await?;
+    let daily = normalize_openweathermap_daily(forecast);
+    Ok(normalize_openweathermap_response(target, current, daily))
+}
+
+async fn fetch_openweathermap_current(
+    client: &Client,
+    target: WeatherTarget,
+    api_key: &str,
+    timeout: Duration,
+) -> Result<OpenWeatherMapResponse, ()> {
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}",
         target.lat, target.lon, api_key
@@ -310,7 +363,58 @@ pub async fn fetch_openweathermap(
     };
 
     match response.json::<OpenWeatherMapResponse>().await {
-        Ok(body) => Ok(normalize_openweathermap_response(target, body)),
+        Ok(body) => Ok(body),
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                latitude = target.lat,
+                longitude = target.lon,
+                "OpenWeatherMap request failed"
+            );
+            Err(())
+        }
+    }
+}
+
+async fn fetch_openweathermap_forecast(
+    client: &Client,
+    target: WeatherTarget,
+    api_key: &str,
+    timeout: Duration,
+) -> Result<OpenWeatherMapForecastResponse, ()> {
+    let url = format!(
+        "https://api.openweathermap.org/data/2.5/forecast?lat={}&lon={}&appid={}",
+        target.lat, target.lon, api_key
+    );
+
+    let response = match client.get(url).timeout(timeout).send().await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                latitude = target.lat,
+                longitude = target.lon,
+                "OpenWeatherMap request failed"
+            );
+            return Err(());
+        }
+    };
+
+    let response = match response.error_for_status() {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::error!(
+                error = %error,
+                latitude = target.lat,
+                longitude = target.lon,
+                "OpenWeatherMap request failed"
+            );
+            return Err(());
+        }
+    };
+
+    match response.json::<OpenWeatherMapForecastResponse>().await {
+        Ok(body) => Ok(body),
         Err(error) => {
             tracing::error!(
                 error = %error,
@@ -326,6 +430,7 @@ pub async fn fetch_openweathermap(
 fn normalize_openweathermap_response(
     target: WeatherTarget,
     body: OpenWeatherMapResponse,
+    daily: WeatherDaily,
 ) -> WeatherResponse {
     let weather_id = body
         .weather
@@ -373,6 +478,39 @@ fn normalize_openweathermap_response(
             wind_direction_10m: body.wind.deg.unwrap_or(0.0),
             wind_gusts_10m: ms_to_kmh(body.wind.gust.unwrap_or(body.wind.speed)),
         },
+        daily_units: weather_daily_units(),
+        daily,
+    }
+}
+
+fn normalize_openweathermap_daily(body: OpenWeatherMapForecastResponse) -> WeatherDaily {
+    let mut grouped = BTreeMap::<String, (f64, f64)>::new();
+
+    for item in body.list {
+        let date = format_local_date(item.dt, body.city.timezone);
+        grouped
+            .entry(date)
+            .and_modify(|(max_temp, min_temp)| {
+                *max_temp = max_temp.max(item.main.temp_max);
+                *min_temp = min_temp.min(item.main.temp_min);
+            })
+            .or_insert((item.main.temp_max, item.main.temp_min));
+    }
+
+    let mut time = Vec::with_capacity(grouped.len());
+    let mut temperature_2m_max = Vec::with_capacity(grouped.len());
+    let mut temperature_2m_min = Vec::with_capacity(grouped.len());
+
+    for (date, (max_temp, min_temp)) in grouped {
+        time.push(date);
+        temperature_2m_max.push(kelvin_to_celsius(max_temp));
+        temperature_2m_min.push(kelvin_to_celsius(min_temp));
+    }
+
+    WeatherDaily {
+        time,
+        temperature_2m_max,
+        temperature_2m_min,
     }
 }
 
@@ -395,6 +533,14 @@ fn weather_current_units() -> WeatherCurrentUnits {
         wind_speed_10m: "km/h".to_string(),
         wind_direction_10m: "°".to_string(),
         wind_gusts_10m: "km/h".to_string(),
+    }
+}
+
+fn weather_daily_units() -> WeatherDailyUnits {
+    WeatherDailyUnits {
+        time: "iso8601".to_string(),
+        temperature_2m_max: "°C".to_string(),
+        temperature_2m_min: "°C".to_string(),
     }
 }
 
@@ -429,6 +575,15 @@ fn format_local_time(unix_seconds: i64, utc_offset_seconds: i64) -> String {
     let minute = (seconds_of_day % 3_600) / 60;
 
     format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}")
+}
+
+fn format_local_date(unix_seconds: i64, utc_offset_seconds: i64) -> String {
+    let local_seconds = unix_seconds + utc_offset_seconds;
+    let seconds_of_day = local_seconds.rem_euclid(86_400);
+    let days = (local_seconds - seconds_of_day) / 86_400;
+    let (year, month, day) = civil_from_days(days);
+
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
@@ -482,12 +637,88 @@ fn map_openweathermap_weather_code(weather_id: i32) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::{
-        OpenWeatherMapClouds, OpenWeatherMapCoord, OpenWeatherMapMain, OpenWeatherMapPrecipitation,
-        OpenWeatherMapResponse, OpenWeatherMapSys, OpenWeatherMapWeather, OpenWeatherMapWind,
-        WeatherTarget, format_gmt_offset, format_local_time, map_openweathermap_weather_code,
-        normalize_openweathermap_response,
+        OpenWeatherMapClouds, OpenWeatherMapCoord, OpenWeatherMapForecastCity,
+        OpenWeatherMapForecastItem, OpenWeatherMapForecastMain, OpenWeatherMapForecastResponse,
+        OpenWeatherMapMain, OpenWeatherMapPrecipitation, OpenWeatherMapResponse, OpenWeatherMapSys,
+        OpenWeatherMapWeather, OpenWeatherMapWind, WeatherDaily, WeatherDailyUnits,
+        WeatherResponse, WeatherTarget, format_gmt_offset, format_local_time,
+        map_openweathermap_weather_code, normalize_openweathermap_daily,
+        normalize_openweathermap_response, weather_daily_units,
     };
+
+    #[test]
+    fn deserializes_open_meteo_response_with_daily() {
+        let body = json!({
+            "latitude": 37.55,
+            "longitude": 127.0,
+            "generationtime_ms": 0.27382373809814453,
+            "utc_offset_seconds": 32400,
+            "timezone": "Asia/Seoul",
+            "timezone_abbreviation": "GMT+9",
+            "elevation": 34.0,
+            "current_units": {
+                "time": "iso8601",
+                "interval": "seconds",
+                "temperature_2m": "°C",
+                "relative_humidity_2m": "%",
+                "apparent_temperature": "°C",
+                "is_day": "",
+                "precipitation": "mm",
+                "rain": "mm",
+                "showers": "mm",
+                "snowfall": "cm",
+                "weather_code": "wmo code",
+                "cloud_cover": "%",
+                "pressure_msl": "hPa",
+                "surface_pressure": "hPa",
+                "wind_speed_10m": "km/h",
+                "wind_direction_10m": "°",
+                "wind_gusts_10m": "km/h"
+            },
+            "current": {
+                "time": "2026-04-10T12:00",
+                "interval": 900,
+                "temperature_2m": 9.7,
+                "relative_humidity_2m": 90,
+                "apparent_temperature": 8.0,
+                "is_day": 1,
+                "precipitation": 0.0,
+                "rain": 0.0,
+                "showers": 0.0,
+                "snowfall": 0.0,
+                "weather_code": 3,
+                "cloud_cover": 94,
+                "pressure_msl": 1001.6,
+                "surface_pressure": 997.5,
+                "wind_speed_10m": 8.2,
+                "wind_direction_10m": 247,
+                "wind_gusts_10m": 24.1
+            },
+            "daily_units": {
+                "time": "iso8601",
+                "temperature_2m_max": "°C",
+                "temperature_2m_min": "°C"
+            },
+            "daily": {
+                "time": ["2026-04-10", "2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16"],
+                "temperature_2m_max": [11.0, 16.0, 20.3, 23.2, 25.7, 24.3, 23.9],
+                "temperature_2m_min": [8.3, 6.5, 4.3, 6.5, 9.8, 6.1, 8.5]
+            }
+        });
+
+        let response: WeatherResponse =
+            serde_json::from_value(body).expect("sample open-meteo response should deserialize");
+
+        assert_eq!(response.timezone, "Asia/Seoul");
+        assert_eq!(response.daily_units, weather_daily_units());
+        assert_eq!(response.daily.time.len(), 7);
+        assert_eq!(response.daily.time[0], "2026-04-10");
+        assert_eq!(response.daily.temperature_2m_max[2], 20.3);
+        assert_eq!(response.daily.temperature_2m_min[6], 8.5);
+    }
 
     #[test]
     fn formats_gmt_offsets_like_open_meteo() {
@@ -511,7 +742,46 @@ mod tests {
     }
 
     #[test]
-    fn normalizes_openweathermap_gps_fallback_metadata() {
+    fn groups_openweathermap_forecast_by_local_date() {
+        let daily = normalize_openweathermap_daily(OpenWeatherMapForecastResponse {
+            list: vec![
+                OpenWeatherMapForecastItem {
+                    dt: 0,
+                    main: OpenWeatherMapForecastMain {
+                        temp_min: 270.15,
+                        temp_max: 280.15,
+                    },
+                },
+                OpenWeatherMapForecastItem {
+                    dt: 7_200,
+                    main: OpenWeatherMapForecastMain {
+                        temp_min: 268.15,
+                        temp_max: 282.15,
+                    },
+                },
+                OpenWeatherMapForecastItem {
+                    dt: 82_800,
+                    main: OpenWeatherMapForecastMain {
+                        temp_min: 275.15,
+                        temp_max: 285.15,
+                    },
+                },
+            ],
+            city: OpenWeatherMapForecastCity { timezone: 3_600 },
+        });
+
+        assert_eq!(
+            daily,
+            WeatherDaily {
+                time: vec!["1970-01-01".to_string(), "1970-01-02".to_string()],
+                temperature_2m_max: vec![9.0, 12.0],
+                temperature_2m_min: vec![-5.0, 2.0],
+            }
+        );
+    }
+
+    #[test]
+    fn normalizes_openweathermap_gps_fallback_metadata_and_daily() {
         let response = normalize_openweathermap_response(
             WeatherTarget::coords(21.0288, 105.8511),
             OpenWeatherMapResponse {
@@ -547,6 +817,11 @@ mod tests {
                     sunset: 1_775_819_610,
                 },
             },
+            WeatherDaily {
+                time: vec!["1970-01-01".to_string(), "1970-01-02".to_string()],
+                temperature_2m_max: vec![9.0, 12.0],
+                temperature_2m_min: vec![-5.0, 2.0],
+            },
         );
 
         assert_eq!(response.latitude, 21.0288);
@@ -554,6 +829,22 @@ mod tests {
         assert_eq!(response.timezone, "GMT+7");
         assert_eq!(response.timezone_abbreviation, "GMT+7");
         assert_eq!(response.elevation, 0.0);
+        assert_eq!(
+            response.daily_units,
+            WeatherDailyUnits {
+                time: "iso8601".to_string(),
+                temperature_2m_max: "°C".to_string(),
+                temperature_2m_min: "°C".to_string(),
+            }
+        );
+        assert_eq!(
+            response.daily,
+            WeatherDaily {
+                time: vec!["1970-01-01".to_string(), "1970-01-02".to_string()],
+                temperature_2m_max: vec![9.0, 12.0],
+                temperature_2m_min: vec![-5.0, 2.0],
+            }
+        );
         assert_eq!(response.current.weather_code, 81);
         assert_eq!(response.current.precipitation, 1.9);
         assert_eq!(response.current.rain, 0.0);
