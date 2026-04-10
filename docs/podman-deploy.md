@@ -117,6 +117,13 @@ podman logs hanoi-cache
 - 서버에서 외부 API로 나가는 네트워크 차단
 - 빌드는 됐지만 런타임 라이브러리 문제 발생
 
+### 빌드 중 `rustc ... is not supported` 오류가 남
+
+현재 lockfile 기준으로 일부 의존성은 `rustc 1.86` 이상을 요구할 수 있습니다.
+
+이 저장소의 `Containerfile`은 builder 이미지를 `rust:1.86-slim-bookworm`으로 맞춰 두었습니다.
+예전에 받은 오래된 `Containerfile`로 빌드 중이라면 최신 파일을 다시 반영한 뒤 재시도합니다.
+
 ### 서버 밖에서 접속이 안 됨
 
 확인 순서:
