@@ -13,6 +13,7 @@
 
 - 문서와 사용자 대상 설명은 한국어로 유지합니다.
 - 현재의 단순한 Rust 구조를 유지하고 과도한 설계를 피합니다.
+- 날씨 API는 `/weather/{loc}` 고정 슬러그와 `/weather?latitude&longitude` GPS 좌표를 함께 지원하며, 좌표가 없거나 잘못되면 기본 위치 `hoankiem`으로 처리합니다.
 - 구현 전에는 `skills/rtd-before/SKILL.md`의 계획 게이트를 따릅니다.
 - 구현 후에는 `skills/rtd-after/SKILL.md`의 품질 게이트를 따릅니다.
 - 없는 파일, 없는 테스트, 없는 실행 경로를 가정하지 않습니다.

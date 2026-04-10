@@ -102,6 +102,7 @@ curl "http://127.0.0.1:3000/weather/hoankiem"
 curl "http://127.0.0.1:3000/weather/minhchau"
 curl "http://127.0.0.1:3000/weather?latitude=21.2083286&longitude=105.433452"
 curl "http://127.0.0.1:3000/weather"
+curl "http://127.0.0.1:3000/weather?latitude=abc&longitude=181"
 ```
 
 대표 응답 예시:
@@ -163,6 +164,7 @@ curl "http://127.0.0.1:3000/weather"
 - `/weather/{loc}`는 기존처럼 코드에 하드코딩된 위치 슬러그만 받습니다.
 - `/weather?latitude=...&longitude=...`는 전달된 GPS 좌표로 공급자를 호출합니다.
 - `/weather`에서 위도/경도가 없거나 비어 있거나 숫자로 파싱되지 않거나 범위를 벗어나면 `/weather/hoankiem`과 같은 흐름으로 처리합니다.
+- 따라서 GPS 좌표 쿼리에는 별도의 `400 invalid coordinates` 응답이 없고, 잘못된 입력도 기본 위치 응답으로 내려갑니다.
 - 유효한 GPS 좌표 요청의 fresh cache 키는 `weather:coords:<latitude>:<longitude>` 형식을 사용하고, 기본값으로 처리된 요청은 기존 `weather:hoankiem` 키를 재사용합니다.
 - Open-Meteo는 `current=temperature_2m,...,wind_gusts_10m&timezone=auto&cell_selection=nearest` 형태로 호출합니다.
 - 두 날씨 공급자 타임아웃은 환경 변수로 조정할 수 있고, 미설정 또는 빈 값이면 둘 다 기본값 `2000ms`를 사용합니다.
@@ -191,6 +193,10 @@ curl "http://127.0.0.1:3000/weather"
   "error": "service unavailable"
 }
 ```
+
+참고:
+
+- `/weather?latitude&longitude`에서 좌표가 잘못된 경우에는 오류 대신 기본 위치 `hoankiem` 응답이 반환됩니다.
 
 ### 4. 요청 로그 확인
 

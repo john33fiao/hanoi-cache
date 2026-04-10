@@ -94,6 +94,7 @@ podman logs -f hanoi-cache
 curl "http://127.0.0.1:8080/geocode?q=Hoan%20Kiem%20Lake"
 curl "http://127.0.0.1:8080/weather/hoankiem"
 curl "http://127.0.0.1:8080/weather?latitude=21.2083286&longitude=105.433452"
+curl "http://127.0.0.1:8080/weather"
 ```
 
 다른 PC에서 접속한다면 서버 IP로 확인합니다.
