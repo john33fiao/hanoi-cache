@@ -36,9 +36,10 @@
 
 ## 라우팅
 
-현재 노출하는 엔드포인트는 두 개입니다.
+현재 노출하는 엔드포인트는 세 개입니다.
 
 - `GET /geocode?q=<query>`
+- `GET /weather?latitude=<f64>&longitude=<f64>`
 - `GET /weather/{loc}`
 
 라우터는 `axum`으로 구성되며, 모든 핸들러는 공유 `AppState`를 사용합니다.
@@ -65,6 +66,23 @@ Nominatim 호출 특성:
 
 - 전 세계 검색이 아니라 하노이 주변의 베트남 결과만 찾습니다.
 - 응답은 서비스 내부 DTO로 재구성하지 않고 외부 JSON을 그대로 전달합니다.
+
+### `/weather`
+
+1. 쿼리 문자열 `latitude`, `longitude`를 읽습니다.
+2. 둘 다 비어 있지 않고 숫자로 파싱되며 범위 안이면 GPS 좌표 요청으로 간주합니다.
+3. GPS 좌표 요청이면 fresh cache 키 `weather:coords:<latitude>:<longitude>`를 조회합니다.
+4. 위 조건을 하나라도 만족하지 못하면 기본 위치 `hoankiem`으로 간주하고 기존 키 `weather:hoankiem`를 사용합니다.
+5. 캐시 미스면 Open-Meteo를 먼저 호출합니다.
+6. Open-Meteo가 실패하면 경고 로그를 남기고 OpenWeatherMap을 호출합니다.
+7. OpenWeatherMap까지 실패하면 stale cache를 확인합니다.
+8. stale cache도 없으면 `503 service unavailable`을 반환합니다.
+
+의미:
+
+- 좌표가 누락되거나 잘못되어도 `400` 대신 `hoankiem` 날씨를 반환합니다.
+- 좌표 캐시는 요청 문자열 그대로 키를 만들므로 같은 숫자라도 표현이 다르면 다른 캐시 엔트리로 취급됩니다.
+- 성공 응답 스키마는 `/weather/{loc}`와 동일합니다.
 
 ### `/weather/{loc}`
 
@@ -99,6 +117,7 @@ TTL 정책:
 
 - 지오코딩: TTL 없음
 - 날씨: fresh TTL은 환경 변수 `WEATHER_CACHE_TTL_SECONDS`로 제어하며, 기본값은 3600초(1시간)
+- 날씨 cache key: 고정 위치는 `weather:{loc}`, GPS 좌표는 `weather:coords:<latitude>:<longitude>`
 - 날씨 stale window: 추가 2시간
 
 이 설계의 장점:
@@ -155,6 +174,8 @@ TTL 정책:
 - 풍속은 m/s에서 km/h로 변환
 - 날씨 condition id는 WMO weather code로 정규화
 - `rain.1h`, `snow.1h`, `pressure`, `sea_level`, `grnd_level` 등을 Open-Meteo 스타일 필드로 매핑
+- 고정 위치 슬러그는 코드에 정의된 timezone/elevation을 사용
+- GPS 좌표 요청 폴백은 `timezone`과 `timezone_abbreviation`을 `GMT+7` 같은 오프셋 문자열로 채우고 `elevation`은 `0.0`으로 둠
 
 표준 날씨 응답 구조:
 
@@ -218,7 +239,8 @@ TTL 정책:
 로그:
 
 - 시작 시 리스닝 주소를 `info`로 출력
-- 각 요청 시작 시 `endpoint`와 입력값(`query` 또는 `loc`)을 `info`로 출력
+- 각 요청 시작 시 `endpoint`와 입력값(`query`, `loc`, 또는 `latitude`/`longitude`)을 `info`로 출력
+- 날씨 요청은 최종 해석 대상 `target=hoankiem|coords`를 함께 출력
 - 최종 응답 시 `source=cache|provider|stale-cache|error`와 상태 코드를 함께 출력
 - 외부 API를 직접 호출해 성공한 경우 `provider=nominatim|open-meteo|openweathermap`를 함께 출력
 - 공급자 요청 실패는 `error`
@@ -230,7 +252,8 @@ TTL 정책:
 
 - 서버 시작 시 `OPENWEATHERMAP_API_KEY`가 항상 필요합니다.
 - 이 값은 셸 환경 변수 또는 `.env` 파일에서 제공할 수 있습니다.
-- `/weather/{loc}` 위치 집합이 코드에 고정되어 있습니다.
+- `/weather/{loc}` 위치 집합은 코드에 고정되어 있습니다.
+- `/weather`는 임의 GPS 좌표를 받을 수 있지만, 좌표가 잘못되면 기본 위치 `hoankiem`로 처리합니다.
 - health check, metrics, rate limit은 없습니다.
 - `src/providers.rs`에 핵심 변환 로직용 단위 테스트가 일부 있습니다.
 - geocode 응답은 외부 API 형식에 직접 결합되어 있습니다.

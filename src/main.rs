@@ -62,6 +62,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/geocode", get(handlers::geocode))
+        .route("/weather", get(handlers::weather_query))
         .route("/weather/{loc}", get(handlers::weather))
         .with_state(state);
 

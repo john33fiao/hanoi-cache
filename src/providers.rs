@@ -9,13 +9,34 @@ use serde::{Deserialize, Serialize};
 const GEOCODE_USER_AGENT: &str = "Hanoi Research Project (john33fiao@tt-inno.com)";
 const OPEN_METEO_CURRENT_FIELDS: &str = "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m";
 
-#[derive(Clone, Copy)]
-pub struct Location {
-    pub key: &'static str,
+pub const DEFAULT_LOCATION_KEY: &str = "hoankiem";
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WeatherTarget {
     pub lat: f64,
     pub lon: f64,
-    pub timezone: &'static str,
-    pub elevation: f64,
+    pub timezone: Option<&'static str>,
+    pub elevation: Option<f64>,
+}
+
+impl WeatherTarget {
+    const fn named(lat: f64, lon: f64, timezone: &'static str, elevation: f64) -> Self {
+        Self {
+            lat,
+            lon,
+            timezone: Some(timezone),
+            elevation: Some(elevation),
+        }
+    }
+
+    pub const fn coords(lat: f64, lon: f64) -> Self {
+        Self {
+            lat,
+            lon,
+            timezone: None,
+            elevation: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -133,22 +154,24 @@ struct OpenWeatherMapSys {
     sunset: i64,
 }
 
-pub fn location_for(loc: &str) -> Option<Location> {
+pub fn default_location() -> WeatherTarget {
+    location_for(DEFAULT_LOCATION_KEY).expect("default location must exist")
+}
+
+pub fn location_for(loc: &str) -> Option<WeatherTarget> {
     match loc {
-        "hoankiem" => Some(Location {
-            key: "hoankiem",
-            lat: 21.0287772,
-            lon: 105.8510772,
-            timezone: "Asia/Bangkok",
-            elevation: 18.0,
-        }),
-        "minhchau" => Some(Location {
-            key: "minhchau",
-            lat: 21.2083286,
-            lon: 105.433452,
-            timezone: "Asia/Bangkok",
-            elevation: 12.0,
-        }),
+        "hoankiem" => Some(WeatherTarget::named(
+            21.0287772,
+            105.8510772,
+            "Asia/Bangkok",
+            18.0,
+        )),
+        "minhchau" => Some(WeatherTarget::named(
+            21.2083286,
+            105.433452,
+            "Asia/Bangkok",
+            12.0,
+        )),
         _ => None,
     }
 }
@@ -201,18 +224,23 @@ pub async fn fetch_geocode(client: &Client, query: &str) -> Result<String, ()> {
 
 pub async fn fetch_open_meteo(
     client: &Client,
-    location: Location,
+    target: WeatherTarget,
     timeout: Duration,
 ) -> Result<WeatherResponse, ()> {
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current={}&timezone=auto&cell_selection=nearest",
-        location.lat, location.lon, OPEN_METEO_CURRENT_FIELDS
+        target.lat, target.lon, OPEN_METEO_CURRENT_FIELDS
     );
 
     let response = match client.get(url).timeout(timeout).send().await {
         Ok(response) => response,
         Err(error) => {
-            tracing::error!(error = %error, location = location.key, "Open-Meteo request failed");
+            tracing::error!(
+                error = %error,
+                latitude = target.lat,
+                longitude = target.lon,
+                "Open-Meteo request failed"
+            );
             return Err(());
         }
     };
@@ -220,7 +248,12 @@ pub async fn fetch_open_meteo(
     let response = match response.error_for_status() {
         Ok(response) => response,
         Err(error) => {
-            tracing::error!(error = %error, location = location.key, "Open-Meteo request failed");
+            tracing::error!(
+                error = %error,
+                latitude = target.lat,
+                longitude = target.lon,
+                "Open-Meteo request failed"
+            );
             return Err(());
         }
     };
@@ -228,7 +261,12 @@ pub async fn fetch_open_meteo(
     match response.json::<WeatherResponse>().await {
         Ok(body) => Ok(body),
         Err(error) => {
-            tracing::error!(error = %error, location = location.key, "Open-Meteo request failed");
+            tracing::error!(
+                error = %error,
+                latitude = target.lat,
+                longitude = target.lon,
+                "Open-Meteo request failed"
+            );
             Err(())
         }
     }
@@ -236,13 +274,13 @@ pub async fn fetch_open_meteo(
 
 pub async fn fetch_openweathermap(
     client: &Client,
-    location: Location,
+    target: WeatherTarget,
     api_key: &str,
     timeout: Duration,
 ) -> Result<WeatherResponse, ()> {
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}",
-        location.lat, location.lon, api_key
+        target.lat, target.lon, api_key
     );
 
     let response = match client.get(url).timeout(timeout).send().await {
@@ -250,7 +288,8 @@ pub async fn fetch_openweathermap(
         Err(error) => {
             tracing::error!(
                 error = %error,
-                location = location.key,
+                latitude = target.lat,
+                longitude = target.lon,
                 "OpenWeatherMap request failed"
             );
             return Err(());
@@ -262,7 +301,8 @@ pub async fn fetch_openweathermap(
         Err(error) => {
             tracing::error!(
                 error = %error,
-                location = location.key,
+                latitude = target.lat,
+                longitude = target.lon,
                 "OpenWeatherMap request failed"
             );
             return Err(());
@@ -270,11 +310,12 @@ pub async fn fetch_openweathermap(
     };
 
     match response.json::<OpenWeatherMapResponse>().await {
-        Ok(body) => Ok(normalize_openweathermap_response(location, body)),
+        Ok(body) => Ok(normalize_openweathermap_response(target, body)),
         Err(error) => {
             tracing::error!(
                 error = %error,
-                location = location.key,
+                latitude = target.lat,
+                longitude = target.lon,
                 "OpenWeatherMap request failed"
             );
             Err(())
@@ -283,7 +324,7 @@ pub async fn fetch_openweathermap(
 }
 
 fn normalize_openweathermap_response(
-    location: Location,
+    target: WeatherTarget,
     body: OpenWeatherMapResponse,
 ) -> WeatherResponse {
     let weather_id = body
@@ -298,15 +339,20 @@ fn normalize_openweathermap_response(
     } else {
         (rain_amount, 0.0)
     };
+    let timezone_abbreviation = format_gmt_offset(body.timezone);
+    let timezone = match target.timezone {
+        Some(timezone) => timezone.to_string(),
+        None => timezone_abbreviation.clone(),
+    };
 
     WeatherResponse {
         latitude: body.coord.lat,
         longitude: body.coord.lon,
         generationtime_ms: 0.0,
         utc_offset_seconds: body.timezone,
-        timezone: location.timezone.to_string(),
-        timezone_abbreviation: format_gmt_offset(body.timezone),
-        elevation: location.elevation,
+        timezone,
+        timezone_abbreviation,
+        elevation: target.elevation.unwrap_or(0.0),
         current_units: weather_current_units(),
         current: WeatherCurrent {
             time: format_local_time(body.dt, body.timezone),
@@ -436,7 +482,12 @@ fn map_openweathermap_weather_code(weather_id: i32) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_gmt_offset, format_local_time, map_openweathermap_weather_code};
+    use super::{
+        OpenWeatherMapClouds, OpenWeatherMapCoord, OpenWeatherMapMain, OpenWeatherMapPrecipitation,
+        OpenWeatherMapResponse, OpenWeatherMapSys, OpenWeatherMapWeather, OpenWeatherMapWind,
+        WeatherTarget, format_gmt_offset, format_local_time, map_openweathermap_weather_code,
+        normalize_openweathermap_response,
+    };
 
     #[test]
     fn formats_gmt_offsets_like_open_meteo() {
@@ -457,5 +508,59 @@ mod tests {
         assert_eq!(map_openweathermap_weather_code(500), 61);
         assert_eq!(map_openweathermap_weather_code(521), 81);
         assert_eq!(map_openweathermap_weather_code(601), 73);
+    }
+
+    #[test]
+    fn normalizes_openweathermap_gps_fallback_metadata() {
+        let response = normalize_openweathermap_response(
+            WeatherTarget::coords(21.0288, 105.8511),
+            OpenWeatherMapResponse {
+                coord: OpenWeatherMapCoord {
+                    lat: 21.0288,
+                    lon: 105.8511,
+                },
+                weather: vec![OpenWeatherMapWeather { id: 521 }],
+                main: OpenWeatherMapMain {
+                    temp: 301.12,
+                    feels_like: 302.89,
+                    humidity: 63.0,
+                    pressure: 1007.0,
+                    sea_level: Some(1007.0),
+                    grnd_level: Some(1006.0),
+                },
+                wind: OpenWeatherMapWind {
+                    speed: 2.3,
+                    deg: Some(165.0),
+                    gust: Some(3.11),
+                },
+                clouds: Some(OpenWeatherMapClouds { all: 12.0 }),
+                rain: Some(OpenWeatherMapPrecipitation {
+                    one_hour: Some(1.4),
+                }),
+                snow: Some(OpenWeatherMapPrecipitation {
+                    one_hour: Some(0.5),
+                }),
+                dt: 1_775_789_152,
+                timezone: 25_200,
+                sys: OpenWeatherMapSys {
+                    sunrise: 1_775_774_527,
+                    sunset: 1_775_819_610,
+                },
+            },
+        );
+
+        assert_eq!(response.latitude, 21.0288);
+        assert_eq!(response.longitude, 105.8511);
+        assert_eq!(response.timezone, "GMT+7");
+        assert_eq!(response.timezone_abbreviation, "GMT+7");
+        assert_eq!(response.elevation, 0.0);
+        assert_eq!(response.current.weather_code, 81);
+        assert_eq!(response.current.precipitation, 1.9);
+        assert_eq!(response.current.rain, 0.0);
+        assert_eq!(response.current.showers, 1.4);
+        assert_eq!(response.current.snowfall, 0.05);
+        assert!((response.current.wind_speed_10m - 8.28).abs() < 0.001);
+        assert!((response.current.wind_gusts_10m - 11.196).abs() < 0.001);
+        assert_eq!(response.current.wind_direction_10m, 165.0);
     }
 }

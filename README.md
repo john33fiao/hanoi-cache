@@ -4,6 +4,7 @@
 
 - `/geocode`: 하노이 범위로 제한된 지오코딩 검색
 - `/weather/{loc}`: 미리 정의된 위치의 현재 날씨 조회
+- `/weather?latitude=<f64>&longitude=<f64>`: GPS 좌표 기준 현재 날씨 조회
 - 인메모리 캐시 사용
 - 날씨 조회 시 1차 공급자 실패하면 2차 공급자로 자동 폴백
 
@@ -83,6 +84,10 @@ curl "http://127.0.0.1:3000/geocode?q=Hoan%20Kiem%20Lake"
 
 `GET /weather/{loc}`
 
+또는
+
+`GET /weather?latitude=<f64>&longitude=<f64>`
+
 현재 지원하는 `loc` 값:
 
 | loc | 설명 |
@@ -95,6 +100,8 @@ curl "http://127.0.0.1:3000/geocode?q=Hoan%20Kiem%20Lake"
 ```bash
 curl "http://127.0.0.1:3000/weather/hoankiem"
 curl "http://127.0.0.1:3000/weather/minhchau"
+curl "http://127.0.0.1:3000/weather?latitude=21.2083286&longitude=105.433452"
+curl "http://127.0.0.1:3000/weather"
 ```
 
 대표 응답 예시:
@@ -153,18 +160,23 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 
 - 1차 공급자는 Open-Meteo입니다.
 - Open-Meteo가 실패하면 OpenWeatherMap으로 폴백합니다.
+- `/weather/{loc}`는 기존처럼 코드에 하드코딩된 위치 슬러그만 받습니다.
+- `/weather?latitude=...&longitude=...`는 전달된 GPS 좌표로 공급자를 호출합니다.
+- `/weather`에서 위도/경도가 없거나 비어 있거나 숫자로 파싱되지 않거나 범위를 벗어나면 `/weather/hoankiem`과 같은 흐름으로 처리합니다.
+- 유효한 GPS 좌표 요청의 fresh cache 키는 `weather:coords:<latitude>:<longitude>` 형식을 사용하고, 기본값으로 처리된 요청은 기존 `weather:hoankiem` 키를 재사용합니다.
 - Open-Meteo는 `current=temperature_2m,...,wind_gusts_10m&timezone=auto&cell_selection=nearest` 형태로 호출합니다.
 - 두 날씨 공급자 타임아웃은 환경 변수로 조정할 수 있고, 미설정 또는 빈 값이면 둘 다 기본값 `2000ms`를 사용합니다.
 - 성공 응답은 Open-Meteo 스타일 메타데이터(`latitude`, `timezone`, `current_units`)와 상세 `current` 필드를 포함합니다.
 - OpenWeatherMap 폴백도 같은 JSON 스키마로 정규화합니다.
 - OpenWeatherMap 폴백에서는 온도 Kelvin -> Celsius, 풍속 m/s -> km/h, 날씨 코드는 WMO code로 변환합니다.
+- GPS 좌표 기반 OpenWeatherMap 폴백에서는 `timezone`과 `timezone_abbreviation`을 `GMT+7` 같은 오프셋 문자열로 채우고, `elevation`은 `0.0`으로 둡니다.
 - 성공 응답은 fresh cache로 유지되며, `WEATHER_CACHE_TTL_SECONDS`로 초 단위 조정이 가능합니다.
 - `WEATHER_CACHE_TTL_SECONDS`를 설정하지 않거나 빈 값이면 기본값 `3600`초(1시간)를 사용합니다.
 - 두 공급자가 모두 실패해도, 만료 후 추가 2시간 안이면 stale cache를 반환합니다.
 
 ### 3. 오류 응답
 
-잘못된 위치:
+잘못된 위치 슬러그:
 
 ```json
 {
@@ -185,7 +197,8 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 `RUST_LOG=info`로 실행하면 각 요청마다 요청 수신과 최종 응답 경로가 로그에 남습니다.
 
 - `endpoint`: 어떤 엔드포인트 요청인지
-- `query` 또는 `loc`: 어떤 입력이 들어왔는지
+- `query`, `loc`, 또는 `latitude`/`longitude`: 어떤 입력이 들어왔는지
+- `target`: 실제로 조회에 사용한 대상. 예: `hoankiem`, `coords`
 - `source`: `cache`, `provider`, `stale-cache`, `error`
 - `provider`: 외부 API를 직접 호출한 경우 `nominatim`, `open-meteo`, `openweathermap`
 
@@ -205,5 +218,5 @@ curl "http://127.0.0.1:3000/weather/minhchau"
 ## 개발 메모
 
 - 상태는 모두 메모리에만 저장됩니다. 재시작하면 캐시가 사라집니다.
-- `/weather/{loc}`는 자유 입력이 아니라 코드에 하드코딩된 위치 슬러그만 지원합니다.
+- `/weather/{loc}`는 코드에 하드코딩된 위치 슬러그만 지원하고, `/weather?latitude&longitude`는 임의 GPS 좌표를 지원합니다.
 - 더 자세한 구조와 설계 의도는 [docs/architecture.md](docs/architecture.md)를 확인하면 됩니다.
