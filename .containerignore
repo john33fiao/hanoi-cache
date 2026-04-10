@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+target
+docs
+skills
+AGENTS.md
+CLAUDE.md
+GEMINI.md

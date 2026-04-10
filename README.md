@@ -8,6 +8,7 @@
 - 날씨 조회 시 1차 공급자 실패하면 2차 공급자로 자동 폴백
 
 설계와 내부 구조는 [docs/architecture.md](docs/architecture.md)에 정리했습니다.
+리눅스 서버 `podman` 배포 절차는 [docs/podman-deploy.md](docs/podman-deploy.md)를 확인하면 됩니다.
 
 ## 빠른 시작
 
